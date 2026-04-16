@@ -89,8 +89,8 @@ namespacing:
 
 ```
 ┌─────────────────────┐
-│   Claude Code /      │
-│   Cursor / Codex     │
+│   Claude Code /     │
+│   Cursor / Codex    │
 └──────────┬──────────┘
            │ stdio
            ▼
