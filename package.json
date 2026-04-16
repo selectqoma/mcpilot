@@ -1,0 +1,27 @@
+{
+  "name": "mcpilot",
+  "version": "0.1.0",
+  "description": "Local MCP proxy — one config, one connection, all your tools",
+  "main": "dist/index.js",
+  "bin": {
+    "mcpilot": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["mcp", "proxy", "claude", "ai", "tools"],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "commander": "^13.1.0",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.14.0",
+    "typescript": "^5.8.3"
+  }
+}
