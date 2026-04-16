@@ -26,6 +26,43 @@ export function resolvePath(filepath: string): string {
 }
 
 function resolveCredentialValue(value: string): string {
+  // vault://KEY_NAME — pull from OS keychain
+  if (value.startsWith("vault://")) {
+    const key = value.slice(8);
+    // Sync-like interface: we throw if not found, but vault is async.
+    // We'll handle this in loadConfig instead.
+    throw new Error(
+      `Vault credential "${key}" requires async resolution. Use loadConfigAsync().`
+    );
+  }
+
+  const envMatch = value.match(/^\$\{(.+)\}$/);
+  if (envMatch) {
+    const envVar = envMatch[1];
+    const resolved = process.env[envVar];
+    if (!resolved) {
+      throw new Error(`Missing required environment variable: ${envVar}`);
+    }
+    return resolved;
+  }
+  return value;
+}
+
+// Async version that supports vault:// credentials
+async function resolveCredentialValueAsync(value: string): Promise<string> {
+  if (value.startsWith("vault://")) {
+    const key = value.slice(8);
+    const { Vault } = await import("./vault.js");
+    const vault = new Vault();
+    const resolved = await vault.get(key);
+    if (!resolved) {
+      throw new Error(
+        `Secret "${key}" not found in keychain. Run: mcpilot vault set ${key}`
+      );
+    }
+    return resolved;
+  }
+
   const envMatch = value.match(/^\$\{(.+)\}$/);
   if (envMatch) {
     const envVar = envMatch[1];
@@ -80,6 +117,36 @@ export function loadConfig(configPath?: string): McpilotConfig {
   if (parsed.credentials) {
     for (const [key, value] of Object.entries(parsed.credentials)) {
       credentials[key] = resolveCredentialValue(value);
+    }
+  }
+
+  return {
+    settings: { ...DEFAULTS.settings, ...parsed.settings },
+    credentials,
+    servers: parsed.servers || DEFAULTS.servers,
+    namespacing: { ...DEFAULTS.namespacing, ...parsed.namespacing },
+  };
+}
+
+export async function loadConfigAsync(configPath?: string): Promise<McpilotConfig> {
+  const resolvedPath = configPath
+    ? resolvePath(configPath)
+    : findConfig();
+
+  if (!resolvedPath || !fs.existsSync(resolvedPath)) {
+    throw new Error(
+      "No mcpilot.yaml found. Run `mcpilot init` to create one."
+    );
+  }
+
+  const raw = fs.readFileSync(resolvedPath, "utf-8");
+  const parsed = yaml.load(raw) as Partial<McpilotConfig>;
+
+  // Resolve credential values (supports vault://)
+  const credentials: Record<string, string> = {};
+  if (parsed.credentials) {
+    for (const [key, value] of Object.entries(parsed.credentials)) {
+      credentials[key] = await resolveCredentialValueAsync(value);
     }
   }
 

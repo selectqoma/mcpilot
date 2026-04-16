@@ -1,6 +1,6 @@
 {
   "name": "mcpilot",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Local MCP proxy — one config, one connection, all your tools",
   "main": "dist/index.js",
   "bin": {
