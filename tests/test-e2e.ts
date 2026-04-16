@@ -1,7 +1,11 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import path from "node:path";
 import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = path.resolve(__dirname, "..");
 const CONFIG_PATH = "/tmp/mcpilot-test/mcpilot.yaml";
 const TEST_DIR = "/tmp/mcpilot-test";
 
@@ -41,7 +45,7 @@ namespacing:
   const transport = new StdioClientTransport({
     command: "node",
     args: [
-      "/Users/dimitrigraur/projects/mcpilot/dist/index.js",
+      path.join(PROJECT_ROOT, "dist/index.js"),
       "start",
       "--config",
       CONFIG_PATH,

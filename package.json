@@ -6,14 +6,22 @@
   "bin": {
     "mcpilot": "dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
+    "test": "npm run build && node --experimental-strip-types tests/test-e2e.ts",
     "prepublishOnly": "npm run build"
   },
   "keywords": ["mcp", "proxy", "claude", "ai", "tools"],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/selectqoma/mcpilot.git"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "commander": "^13.1.0",
