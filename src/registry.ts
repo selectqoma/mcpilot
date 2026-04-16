@@ -1,4 +1,4 @@
-import { ChildProcess, spawn } from "node:child_process";
+import { ChildProcess } from "node:child_process";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { ResolvedServer } from "./types.js";
@@ -7,10 +7,14 @@ interface ManagedServer {
   name: string;
   process: ChildProcess;
   client: Client;
+  startedAt: number;
+  restartCount: number;
+  consecutiveFailures: number;
 }
 
 export class ServerRegistry {
   private servers: Map<string, ManagedServer> = new Map();
+  private serverConfigs: Map<string, ResolvedServer> = new Map();
 
   async startAll(resolvedServers: ResolvedServer[]): Promise<void> {
     const errors: string[] = [];
@@ -52,13 +56,41 @@ export class ServerRegistry {
       name: server.name,
       process: childProcess,
       client,
+      startedAt: Date.now(),
+      restartCount: 0,
+      consecutiveFailures: 0,
     });
 
+    this.serverConfigs.set(server.name, server);
     console.error(`[mcpilot] Started server: ${server.name}`);
+  }
+
+  async restart(name: string): Promise<void> {
+    const config = this.serverConfigs.get(name);
+    if (!config) throw new Error(`No config for server: ${name}`);
+
+    const managed = this.servers.get(name);
+    if (managed) {
+      try { await managed.client.close(); } catch { /* ignore */ }
+      try { managed.process.kill(); } catch { /* ignore */ }
+    }
+
+    await this.start(config);
+
+    const newManaged = this.servers.get(name);
+    if (newManaged && managed) {
+      newManaged.restartCount = managed.restartCount + 1;
+    }
+
+    console.error(`[mcpilot] Restarted server: ${name}`);
   }
 
   getClient(name: string): Client | undefined {
     return this.servers.get(name)?.client;
+  }
+
+  getManagedServer(name: string): ManagedServer | undefined {
+    return this.servers.get(name);
   }
 
   getServerNames(): string[] {
@@ -67,6 +99,10 @@ export class ServerRegistry {
 
   hasServer(name: string): boolean {
     return this.servers.has(name);
+  }
+
+  get size(): number {
+    return this.servers.size;
   }
 
   async listTools(): Promise<
@@ -135,5 +171,6 @@ export class ServerRegistry {
 
     await Promise.all(promises);
     this.servers.clear();
+    this.serverConfigs.clear();
   }
 }

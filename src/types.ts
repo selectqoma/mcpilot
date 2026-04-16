@@ -35,3 +35,24 @@ export interface ToolCallLog {
   status: "success" | "error";
   error?: string;
 }
+
+export interface ServerState {
+  status: "healthy" | "unhealthy" | "stopped" | "starting";
+  tool_count: number;
+  last_check: string;
+  restarts: number;
+  error?: string;
+}
+
+export interface ProxyState {
+  pid: number;
+  started_at: string;
+  servers: Record<string, ServerState>;
+}
+
+export interface HealthStatus {
+  healthy: boolean;
+  latency_ms: number;
+  error?: string;
+  tool_count?: number;
+}

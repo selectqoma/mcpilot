@@ -8,24 +8,47 @@ import {
 import { McpilotConfig } from "./types.js";
 import { ServerRegistry } from "./registry.js";
 import { RequestLogger } from "./logger.js";
+import { HealthMonitor } from "./health.js";
+import { UsageTracker } from "./usage-tracker.js";
 import { applyFilter, parseNamespacedTool, NamespacedTool } from "./filter.js";
+import { writeState, clearState } from "./state.js";
 
 export async function startProxy(config: McpilotConfig): Promise<void> {
   const registry = new ServerRegistry();
   const logger = new RequestLogger(config.settings.log_file);
+  const usageTracker = new UsageTracker();
+  usageTracker.seedFromLog(config.settings.log_file);
 
   // Resolve and start all backend servers
   const { resolveServers } = await import("./config.js");
   const servers = resolveServers(config);
   await registry.startAll(servers);
 
+  // Write initial state
+  writeState(registry);
+
+  // Start health monitoring
+  const healthMonitor = new HealthMonitor(registry, config, logger, () => {
+    const allStatus = healthMonitor.getAllStatus();
+    const healthMap = new Map<string, { healthy: boolean; tool_count?: number; error?: string }>();
+    for (const [name, status] of allStatus) {
+      healthMap.set(name, {
+        healthy: status.healthy,
+        tool_count: status.tool_count,
+        error: status.error,
+      });
+    }
+    writeState(registry, healthMap);
+  });
+  healthMonitor.start();
+
   // Create the MCP server that clients connect to
   const server = new Server(
-    { name: "mcpilot", version: "0.1.0" },
+    { name: "mcpilot", version: "0.2.0" },
     { capabilities: { tools: {} } }
   );
 
-  // Handle tools/list — aggregate from all backends with namespacing
+  // Handle tools/list — aggregate from all backends with namespacing + capping
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const allTools = await registry.listTools();
     const namespaced: NamespacedTool[] = [];
@@ -35,8 +58,24 @@ export async function startProxy(config: McpilotConfig): Promise<void> {
       namespaced.push(...filtered);
     }
 
+    // Cap at max_tools — drop least-recently-used
+    let result = namespaced;
+    if (result.length > config.settings.max_tools) {
+      const excess = result.length - config.settings.max_tools;
+      const toDrop = new Set(
+        usageTracker.getLeastRecentlyUsed(
+          result.map((t) => t.namespacedName),
+          excess
+        )
+      );
+      result = result.filter((t) => !toDrop.has(t.namespacedName));
+      console.error(
+        `[mcpilot] Capped tools: ${namespaced.length} → ${result.length} (max: ${config.settings.max_tools})`
+      );
+    }
+
     return {
-      tools: namespaced.map((t) => ({
+      tools: result.map((t) => ({
         name: t.namespacedName,
         description: t.description
           ? `[${t.serverName}] ${t.description}`
@@ -65,6 +104,9 @@ export async function startProxy(config: McpilotConfig): Promise<void> {
       throw new Error(`Server not found: ${parsed.serverName}`);
     }
 
+    // Track usage
+    usageTracker.record(name);
+
     return logger.wrapCall<CallToolResult>(
       parsed.serverName,
       parsed.originalName,
@@ -86,6 +128,8 @@ export async function startProxy(config: McpilotConfig): Promise<void> {
   // Graceful shutdown
   const cleanup = async () => {
     console.error("[mcpilot] Shutting down...");
+    healthMonitor.stop();
+    clearState();
     await registry.stopAll();
     process.exit(0);
   };
