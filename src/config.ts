@@ -99,7 +99,7 @@ export function resolveServers(config: McpilotConfig): ResolvedServer[] {
   }));
 }
 
-function findConfig(): string | null {
+export function findConfig(): string | null {
   // Check current directory, then parent directories up to home
   let dir = process.cwd();
   const home = os.homedir();
